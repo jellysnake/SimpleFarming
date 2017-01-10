@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.terasology.simpleFarming.systems;
 
 import com.google.common.collect.Lists;
@@ -33,10 +34,10 @@ import org.terasology.logic.common.ActivateEvent;
 import org.terasology.logic.common.DisplayNameComponent;
 import org.terasology.logic.delay.DelayManager;
 import org.terasology.logic.delay.DelayedActionTriggeredEvent;
-import org.terasology.logic.inventory.InventoryComponent;
-import org.terasology.logic.inventory.InventoryManager;
 import org.terasology.logic.inventory.ItemComponent;
 import org.terasology.logic.inventory.events.DropItemEvent;
+import org.terasology.logic.inventory.events.GiveItemEvent;
+import org.terasology.logic.inventory.events.RemoveItemEvent;
 import org.terasology.math.Side;
 import org.terasology.math.geom.Vector3f;
 import org.terasology.math.geom.Vector3i;
@@ -80,8 +81,6 @@ public class FarmingAuthoritySystem extends BaseComponentSystem {
     @In
     BlockManager blockManager;
     @In
-    InventoryManager inventoryManager;
-    @In
     DelayManager delayManager;
     @In
     EntityManager entityManager;
@@ -92,15 +91,15 @@ public class FarmingAuthoritySystem extends BaseComponentSystem {
 
     Random random = new FastRandom();
 
-    @ReceiveEvent
     /**
      * Handles the seed drop on plant destroyed event.
      *
-     * @param event                     The corresponding event.
-     * @param seedItem                  Reference to the seed entity.
-     * @param plantDefinitionComponent  The definition of the plant.
-     * @param itemComponent             The item component corresponding to the event
+     * @param event                    The corresponding event.
+     * @param seedItem                 Reference to the seed entity.
+     * @param plantDefinitionComponent The definition of the plant.
+     * @param itemComponent            The item component corresponding to the event
      */
+    @ReceiveEvent
     public void onPlantSeed(ActivateEvent event, EntityRef seedItem, PlantDefinitionComponent plantDefinitionComponent, ItemComponent itemComponent) {
         if (!event.getTarget().exists() || event.getTargetLocation() == null) {
             return;
@@ -150,7 +149,10 @@ public class FarmingAuthoritySystem extends BaseComponentSystem {
             }
 
             schedulePlantGrowth(plantEntity, growthStage);
-            inventoryManager.removeItem(seedItem.getOwner(), seedItem, seedItem, true, 1);
+            RemoveItemEvent removeEvent = new RemoveItemEvent(seedItem.getOwner());
+            removeEvent.setCount(1);
+            removeEvent.setDestroyRemoved(true);
+            seedItem.send(removeEvent);
         }
     }
 
@@ -166,15 +168,15 @@ public class FarmingAuthoritySystem extends BaseComponentSystem {
         return growthStage;
     }
 
-    @ReceiveEvent
     /**
      * Handles the seed drop on plant destroyed event.
      *
-     * @param event                     The event corresponding to the plant destroy.
-     * @param entity                    Reference to the plant entity.
-     * @param plantDefinitionComponent  The definition of the plant.
-     * @param blockComponent            The block component corresponding to the event
+     * @param event                    The event corresponding to the plant destroy.
+     * @param entity                   Reference to the plant entity.
+     * @param plantDefinitionComponent The definition of the plant.
+     * @param blockComponent           The block component corresponding to the event
      */
+    @ReceiveEvent
     public void onPlantDestroyed(CreateBlockDropsEvent event, EntityRef entity, PlantDefinitionComponent plantDefinitionComponent, BlockComponent blockComponent) {
         event.consume();
         EntityRef seedItem = entityManager.create(plantDefinitionComponent.seedPrefab);
@@ -193,30 +195,30 @@ public class FarmingAuthoritySystem extends BaseComponentSystem {
         delayManager.addDelayedAction(entity, GROWTH_ACTION, timeRange.getTimeRange());
     }
 
-    @ReceiveEvent
     /**
      * Handles plant growth based on the schedule time from delayed action
      *
-     * @param event                     The delayed action event.
-     * @param entity                    The entity which is going to grown
-     * @param plantDefinitionComponent  The definition of the plant.
-     * @param blockComponent            The block component corresponding to the event
+     * @param event                    The delayed action event.
+     * @param entity                   The entity which is going to grown
+     * @param plantDefinitionComponent The definition of the plant.
+     * @param blockComponent           The block component corresponding to the event
      */
+    @ReceiveEvent
     public void scheduledPlantGrowth(DelayedActionTriggeredEvent event, EntityRef entity, PlantDefinitionComponent plantDefinitionComponent, BlockComponent blockComponent) {
         if (event.getActionId().equals(GROWTH_ACTION)) {
             entity.send(new OnPlantGrowth());
         }
     }
 
-    @ReceiveEvent
     /**
      * Handles plant growth event.
      *
-     * @param event                     The event corresponding to the plant growth.
-     * @param entity                    The entity which is going to grown
-     * @param plantDefinitionComponent  The definition of the plant.
-     * @param blockComponent            The block component corresponding to the event
+     * @param event                    The event corresponding to the plant growth.
+     * @param entity                   The entity which is going to grown
+     * @param plantDefinitionComponent The definition of the plant.
+     * @param blockComponent           The block component corresponding to the event
      */
+    @ReceiveEvent
     public void onPlantGrowth(OnPlantGrowth event, EntityRef entity, PlantDefinitionComponent plantDefinitionComponent, BlockComponent blockComponent) {
         if (delayManager.hasDelayedAction(entity, GROWTH_ACTION)) {
             delayManager.cancelDelayedAction(entity, GROWTH_ACTION);
@@ -358,13 +360,15 @@ public class FarmingAuthoritySystem extends BaseComponentSystem {
             harvestingEntity = instigator;
         }
 
-        if (!event.isConsumed() && target.exists() && harvestingEntity.exists() && harvestingEntity.hasComponent(InventoryComponent.class)) {
+        if (!event.isConsumed() && target.exists() && harvestingEntity.exists()) {
             PlantProduceComponent plantProduceComponent = target.getComponent(PlantProduceComponent.class);
             if (plantProduceComponent != null) {
                 EntityRef produceItem = plantProduceComponent.produceItem;
                 plantProduceComponent.produceItem = EntityRef.NULL;
                 target.saveComponent(plantProduceComponent);
-                if (!inventoryManager.giveItem(harvestingEntity, target, produceItem) && target.hasComponent(BlockComponent.class)) {
+
+                GiveItemEvent giveEvent = produceItem.send(new GiveItemEvent(harvestingEntity));
+                if (!giveEvent.isHandled() && target.hasComponent(BlockComponent.class)) {
                     Vector3f position = target.getComponent(BlockComponent.class).getPosition().toVector3f().add(0, 0.5f, 0);
                     produceItem.send(new DropItemEvent(position));
                     produceItem.send(new ImpulseEvent(random.nextVector3f(15.0f)));

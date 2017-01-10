@@ -30,9 +30,8 @@ import org.terasology.logic.delay.DelayManager;
 import org.terasology.logic.delay.DelayedActionTriggeredEvent;
 import org.terasology.logic.health.DoDestroyEvent;
 import org.terasology.logic.health.EngineDamageTypes;
-import org.terasology.logic.inventory.InventoryComponent;
-import org.terasology.logic.inventory.InventoryManager;
 import org.terasology.logic.inventory.events.DropItemEvent;
+import org.terasology.logic.inventory.events.GiveItemEvent;
 import org.terasology.math.Region3i;
 import org.terasology.math.geom.Vector3f;
 import org.terasology.math.geom.Vector3i;
@@ -84,8 +83,6 @@ public class TreeAuthoritySystem extends BaseComponentSystem {
     private BlockEntityRegistry blockEntityRegistry;
     @In
     private DelayManager delayManager;
-    @In
-    private InventoryManager inventoryManager;
     @In
     private EntityManager entityManager;
     @In
@@ -244,10 +241,11 @@ public class TreeAuthoritySystem extends BaseComponentSystem {
     public void onGiveFruit(ActivateEvent event, EntityRef fruitEntity, TreeFruitCreationComponent creationComponent, BlockComponent blockComponent) {
         EntityRef instigator = event.getInstigator();
 
-        if (!event.isConsumed() && instigator.hasComponent(InventoryComponent.class)) {
+        if (!event.isConsumed()) {
             EntityRef fruitItem = entityManager.create(creationComponent.fruitPrefab);
             if (fruitItem != EntityRef.NULL) {
-                if (!inventoryManager.giveItem(instigator, instigator, fruitItem)) {
+                GiveItemEvent giveEvent = fruitItem.send(new GiveItemEvent(instigator));
+                if (!giveEvent.isHandled()) {
                     Vector3f position = blockComponent.getPosition().toVector3f();
                     if (worldProvider.getBlock(new Vector3f(position).add(0, -1f, 0)).isReplacementAllowed()) {
                         position.add(0, -0.5f, 0);

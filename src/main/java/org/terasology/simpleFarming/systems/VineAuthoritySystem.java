@@ -28,8 +28,8 @@ import org.terasology.entitySystem.systems.RegisterSystem;
 import org.terasology.logic.common.ActivateEvent;
 import org.terasology.logic.delay.DelayManager;
 import org.terasology.logic.delay.DelayedActionTriggeredEvent;
-import org.terasology.logic.inventory.InventoryManager;
 import org.terasology.logic.inventory.ItemComponent;
+import org.terasology.logic.inventory.events.RemoveItemEvent;
 import org.terasology.math.Direction;
 import org.terasology.math.Side;
 import org.terasology.math.geom.Vector3i;
@@ -56,8 +56,6 @@ public class VineAuthoritySystem extends BaseComponentSystem {
     private WorldProvider worldProvider;
     @In
     private BlockManager blockManager;
-    @In
-    private InventoryManager inventoryManager;
     @In
     private DelayManager delayManager;
     @In
@@ -98,8 +96,10 @@ public class VineAuthoritySystem extends BaseComponentSystem {
             EntityRef vineEntity = plantVineAtPosition(vineDefinitionComponent, plantPosition, saplingBlock);
 
             scheduleVineGrowth(vineEntity, vineDefinitionComponent.nextGrowth.getTimeRange());
-
-            inventoryManager.removeItem(seedItem.getOwner(), seedItem, seedItem, true, 1);
+            RemoveItemEvent removeEvent =  new RemoveItemEvent(seedItem.getOwner());
+            removeEvent.setCount(1);
+            removeEvent.setDestroyRemoved(true);
+            seedItem.send(removeEvent);
         }
     }
 
